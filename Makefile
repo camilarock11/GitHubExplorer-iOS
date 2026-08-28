@@ -1,6 +1,6 @@
 PROJECT=GitHubExplorer.xcodeproj
 SCHEME=GitHubExplorer
-DESTINATION=platform=iOS Simulator,OS=latest,name=iPhone 16 Pro
+DESTINATION=platform=iOS Simulator,name=iPhone 16 Pro
 
 .PHONY: test build
 
