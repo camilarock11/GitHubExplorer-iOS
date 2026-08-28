@@ -25,6 +25,6 @@ jobs:
             -project GitHubExplorer.xcodeproj \
             -scheme GitHubExplorer \
             -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16 Pro' \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
             clean test \
             CODE_SIGNING_ALLOWED=NO
