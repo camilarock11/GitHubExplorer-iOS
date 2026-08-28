@@ -4,7 +4,11 @@ struct UserSearchPage: Equatable {
     let page: Int
     let perPage: Int
 
+    private var searchableCount: Int {
+        min(totalCount, 1_000)
+    }
+
     var hasNextPage: Bool {
-        page * perPage < totalCount
+        page * perPage < searchableCount
     }
 }
