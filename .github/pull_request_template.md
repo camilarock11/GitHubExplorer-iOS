@@ -7,6 +7,11 @@
 
 - 
 
+## Ticket
+<!-- Reference the GitHubExplorer roadmap ticket when applicable. -->
+
+GE-XXX
+
 ## How to test
 <!-- Describe the steps needed to validate the change. Use N/A only when testing truly does not apply. -->
 
