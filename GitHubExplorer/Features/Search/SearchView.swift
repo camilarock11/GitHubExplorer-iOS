@@ -56,7 +56,7 @@ struct SearchView: View {
             }
         }
         .refreshable {
-            viewModel.search()
+            await viewModel.refresh()
         }
     }
 }
