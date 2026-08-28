@@ -23,13 +23,14 @@ struct RetryPolicy: Equatable {
     func shouldRetry(urlError: URLError, method: String?) -> Bool {
         guard method == HTTPMethod.get.rawValue else { return false }
 
-        return [
-            URLError.timedOut,
+        let retryableCodes: Set<URLError.Code> = [
+            .timedOut,
             .networkConnectionLost,
             .cannotConnectToHost,
             .cannotFindHost,
             .dnsLookupFailed
-        ].contains(urlError.code)
+        ]
+        return retryableCodes.contains(urlError.code)
     }
 
     func delayNanoseconds(afterFailedAttempt attempt: Int) -> UInt64 {
