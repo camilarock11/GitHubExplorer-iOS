@@ -1,0 +1,36 @@
+name: GitHubExplorer
+options:
+  minimumXcodeGenVersion: 2.40.0
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    IPHONEOS_DEPLOYMENT_TARGET: 17.0
+    SWIFT_STRICT_CONCURRENCY: targeted
+
+targets:
+  GitHubExplorer:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - GitHubExplorer
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.camilarock.githubexplorer
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+    scheme:
+      testTargets:
+        - GitHubExplorerTests
+  GitHubExplorerTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - GitHubExplorerTests
+    dependencies:
+      - target: GitHubExplorer
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.camilarock.githubexplorer.tests
+        GENERATE_INFOPLIST_FILE: YES
