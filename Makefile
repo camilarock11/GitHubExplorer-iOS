@@ -8,4 +8,4 @@ build:
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -sdk iphonesimulator -destination '$(DESTINATION)' build CODE_SIGNING_ALLOWED=NO
 
 test:
-	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -sdk iphonesimulator -destination '$(DESTINATION)' test CODE_SIGNING_ALLOWED=NO
+	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -sdk iphonesimulator -destination '$(DESTINATION)' test CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES
