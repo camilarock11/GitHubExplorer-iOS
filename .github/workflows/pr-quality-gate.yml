@@ -1,0 +1,233 @@
+name: PR Quality Gate
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - ready_for_review
+      - converted_to_draft
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pr-quality-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate PR conventions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate title, branch and description
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const title = (pr.title || '').trim();
+            const branch = (pr.head.ref || '').trim();
+            const body = pr.body || '';
+            const author = pr.user.login;
+            const isDraft = Boolean(pr.draft);
+
+            const titleTypes = [
+              'FEAT',
+              'FIX',
+              'HOTFIX',
+              'CHORE',
+              'REFACTOR',
+              'DOCS',
+              'TEST',
+              'CI',
+              'BUILD',
+              'PERF',
+              'STYLE',
+              'REVERT'
+            ];
+
+            const branchTypes = [
+              'feat',
+              'fix',
+              'hotfix',
+              'chore',
+              'refactor',
+              'docs',
+              'test',
+              'ci',
+              'build',
+              'perf',
+              'style',
+              'revert'
+            ];
+
+            const errors = [];
+            const warnings = [];
+            const passed = [];
+
+            const titleRegex = new RegExp(
+              `^(${titleTypes.join('|')}): \\[O([1-9]\\d*)\\] (.{5,})$`
+            );
+            const branchRegex = new RegExp(
+              `^(${branchTypes.join('|')})/o([1-9]\\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$`
+            );
+
+            const titleMatch = title.match(titleRegex);
+            const branchMatch = branch.match(branchRegex);
+
+            if (!titleMatch) {
+              errors.push(
+                `**Title:** use \`TYPE: [O1] Description\`. Example: \`CHORE: [O1] Protect main branch\`.`
+              );
+            } else {
+              passed.push(`Title follows the required format: \`${title}\``);
+            }
+
+            if (!branchMatch) {
+              errors.push(
+                `**Branch:** use \`type/o1-short-description\`, lowercase and hyphenated. Example: \`chore/o1-main-protection\`.`
+              );
+            } else {
+              passed.push(`Branch follows the required format: \`${branch}\``);
+            }
+
+            if (titleMatch && branchMatch) {
+              const titleType = titleMatch[1];
+              const titleObjective = titleMatch[2];
+              const branchType = branchMatch[1].toUpperCase();
+              const branchObjective = branchMatch[2];
+
+              if (titleType !== branchType) {
+                errors.push(
+                  `**Type mismatch:** title uses \`${titleType}\`, but the branch uses \`${branchMatch[1]}\`.`
+                );
+              } else {
+                passed.push('PR type matches the branch type.');
+              }
+
+              if (titleObjective !== branchObjective) {
+                errors.push(
+                  `**Objective mismatch:** title uses \`[O${titleObjective}]\`, but the branch uses \`o${branchObjective}\`.`
+                );
+              } else {
+                passed.push(`Objective identifier matches: \`O${titleObjective}\`.`);
+              }
+            }
+
+            const stripComments = (text) =>
+              text.replace(/<!--[\s\S]*?-->/g, '').trim();
+
+            const escapeRegex = (text) =>
+              text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            const getSection = (heading) => {
+              const regex = new RegExp(
+                `(?:^|\\n)##\\s+${escapeRegex(heading)}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`,
+                'i'
+              );
+              const match = body.match(regex);
+              return match ? stripComments(match[1]) : '';
+            };
+
+            const requiredSections = ['Objective', 'Changes', 'How to test'];
+            for (const section of requiredSections) {
+              const content = getSection(section);
+              if (!content) {
+                errors.push(`**PR description:** fill in the \`## ${section}\` section.`);
+              } else {
+                passed.push(`\`${section}\` section is filled in.`);
+              }
+            }
+
+            const uncheckedItems = body.match(/^\s*-\s*\[\s\]\s+.+$/gim) || [];
+            if (uncheckedItems.length > 0) {
+              if (isDraft) {
+                warnings.push(
+                  `${uncheckedItems.length} checklist item(s) are still open. That's okay while the PR is a draft.`
+                );
+              } else {
+                errors.push(
+                  `**Checklist:** complete all items before merging (${uncheckedItems.length} still unchecked).`
+                );
+              }
+            } else if (body.includes('- [x]') || body.includes('- [X]')) {
+              passed.push('PR checklist is complete.');
+            }
+
+            const changedLines = (pr.additions || 0) + (pr.deletions || 0);
+            if (changedLines > 600) {
+              warnings.push(
+                `This PR changes ${changedLines} lines. Consider splitting very large PRs when practical.`
+              );
+            }
+            if ((pr.changed_files || 0) > 30) {
+              warnings.push(
+                `This PR changes ${pr.changed_files} files. Consider splitting it if the changes cover unrelated concerns.`
+              );
+            }
+
+            const marker = '<!-- pr-quality-gate -->';
+            const status = errors.length === 0 ? '✅' : '❌';
+            const stateText = errors.length === 0
+              ? 'All required PR conventions passed.'
+              : 'I found some items that need attention.';
+
+            const formatList = (items) => items.map((item) => `- ${item}`).join('\n');
+
+            const commentBody = `${marker}
+            ## ${status} PR Quality Gate
+
+            @${author}, ${stateText}
+
+            **Expected title:** \`TYPE: [O1] Description\`  
+            **Expected branch:** \`type/o1-short-description\`
+
+            ${passed.length ? `### Passed\n${formatList(passed)}\n` : ''}
+            ${errors.length ? `### Fix before merge\n${formatList(errors)}\n` : ''}
+            ${warnings.length ? `### Warnings\n${formatList(warnings)}\n` : ''}
+            <sub>This comment is updated automatically whenever the PR changes.</sub>`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              per_page: 100
+            });
+
+            const existing = comments.find(
+              (comment) => comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: commentBody
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: commentBody
+              });
+            }
+
+            await core.summary
+              .addHeading(`${status} PR Quality Gate`)
+              .addRaw(`Title: ${title}\n`)
+              .addRaw(`Branch: ${branch}\n`)
+              .addRaw(`Draft: ${isDraft ? 'yes' : 'no'}\n`)
+              .write();
+
+            if (errors.length > 0) {
+              core.setFailed(errors.map((error) => error.replace(/\*\*/g, '')).join('\n'));
+            }
