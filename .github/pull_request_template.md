@@ -1,25 +1,33 @@
-## What changed?
+## Objective
+<!-- Explain what this PR solves and why it is needed. -->
 
-Describe the change and the user/developer impact.
+
+## Changes
+<!-- Summarize the main changes. Prefer short bullet points. -->
+
+- 
 
 ## Ticket
+<!-- Reference the GitHubExplorer roadmap ticket when applicable. -->
 
-- [ ] GE-XXX
+GE-XXX
 
-## How was it tested?
+## How to test
+<!-- Describe the steps needed to validate the change. Use N/A only when testing truly does not apply. -->
 
-- [ ] Unit tests
-- [ ] Manual simulator validation
-- [ ] Error/empty/loading states checked where applicable
+1. 
 
-## Screenshots / recordings
+## Evidence
+<!-- Add screenshots, videos, logs or write N/A. -->
 
-Add visual evidence for UI changes.
+N/A
 
 ## Checklist
 
-- [ ] PR title follows `TYPE: [GE-XXX] Description`
-- [ ] No secrets or tokens were committed
-- [ ] Architecture boundaries remain respected
-- [ ] Accessibility was considered
-- [ ] README/docs were updated when needed
+- [ ] I tested the change or documented why testing does not apply.
+- [ ] I reviewed my own diff before requesting merge.
+- [ ] The PR title follows `TYPE: [O1] Description`.
+- [ ] The branch follows `type/o1-short-description`.
+- [ ] The PR type and objective match the branch type and objective.
+- [ ] I did not add secrets, credentials or sensitive data.
+- [ ] I updated documentation when the change requires it.
