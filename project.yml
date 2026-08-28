@@ -19,6 +19,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.camilarock.githubexplorer
         GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1,2"
+      configs:
+        Debug:
+          ENABLE_TESTABILITY: YES
     scheme:
       testTargets:
         - GitHubExplorerTests
