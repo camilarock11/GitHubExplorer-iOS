@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import GitHubExplorer
 
@@ -141,4 +142,222 @@ final class SearchViewModelTests: XCTestCase {
             XCTFail("Timed out waiting for asynchronous condition")
         }
     }
+}
+
+final class URLSessionAPIClientTests: XCTestCase {
+    override func tearDown() {
+        URLProtocolStub.requestHandler = nil
+        super.tearDown()
+    }
+
+    func testRequest_whenResponseSucceeds_decodesPayloadAndSendsGitHubHeaders() async throws {
+        var apiVersionHeader: String?
+        var acceptHeader: String?
+
+        URLProtocolStub.requestHandler = { request in
+            apiVersionHeader = request.value(forHTTPHeaderField: "X-GitHub-Api-Version")
+            acceptHeader = request.value(forHTTPHeaderField: "Accept")
+            return (
+                Self.response(for: request, statusCode: 200),
+                Data("{\"value\":\"ok\"}".utf8)
+            )
+        }
+
+        let client = makeClient()
+        let result = try await client.request(
+            GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+            as: StubPayload.self
+        )
+
+        XCTAssertEqual(result, StubPayload(value: "ok"))
+        XCTAssertEqual(apiVersionHeader, "2022-11-28")
+        XCTAssertEqual(acceptHeader, "application/vnd.github+json")
+    }
+
+    func testRequest_whenResponseCannotDecode_throwsDecodingFailed() async {
+        URLProtocolStub.requestHandler = { request in
+            (
+                Self.response(for: request, statusCode: 200),
+                Data("not-json".utf8)
+            )
+        }
+
+        do {
+            let _: StubPayload = try await makeClient().request(
+                GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+                as: StubPayload.self
+            )
+            XCTFail("Expected decoding failure")
+        } catch let error as NetworkError {
+            XCTAssertEqual(error, .decodingFailed)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRequest_whenGitHubReturnsValidationError_preservesMessage() async {
+        URLProtocolStub.requestHandler = { request in
+            (
+                Self.response(for: request, statusCode: 422),
+                Data("{\"message\":\"Validation Failed\"}".utf8)
+            )
+        }
+
+        do {
+            let _: StubPayload = try await makeClient().request(
+                GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+                as: StubPayload.self
+            )
+            XCTFail("Expected validation error")
+        } catch let error as NetworkError {
+            XCTAssertEqual(error, .validationFailed("Validation Failed"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRequest_whenRateLimited_throwsRateLimited() async {
+        URLProtocolStub.requestHandler = { request in
+            (
+                Self.response(for: request, statusCode: 429),
+                Data("{\"message\":\"rate limited\"}".utf8)
+            )
+        }
+
+        do {
+            let _: StubPayload = try await makeClient().request(
+                GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+                as: StubPayload.self
+            )
+            XCTFail("Expected rate limit error")
+        } catch let error as NetworkError {
+            XCTAssertEqual(error, .rateLimited)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRequest_whenTransientServerError_retriesAndThenSucceeds() async throws {
+        var requestCount = 0
+
+        URLProtocolStub.requestHandler = { request in
+            requestCount += 1
+
+            if requestCount == 1 {
+                return (
+                    Self.response(for: request, statusCode: 503),
+                    Data("{\"message\":\"temporarily unavailable\"}".utf8)
+                )
+            }
+
+            return (
+                Self.response(for: request, statusCode: 200),
+                Data("{\"value\":\"recovered\"}".utf8)
+            )
+        }
+
+        let client = makeClient(
+            retryPolicy: RetryPolicy(maxAttempts: 2, baseDelayNanoseconds: 0)
+        )
+        let result = try await client.request(
+            GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+            as: StubPayload.self
+        )
+
+        XCTAssertEqual(result, StubPayload(value: "recovered"))
+        XCTAssertEqual(requestCount, 2)
+    }
+
+    func testRequest_whenTaskIsCancelled_propagatesCancellation() async {
+        URLProtocolStub.requestHandler = { request in
+            Thread.sleep(forTimeInterval: 0.15)
+            return (
+                Self.response(for: request, statusCode: 200),
+                Data("{\"value\":\"too-late\"}".utf8)
+            )
+        }
+
+        let client = makeClient()
+        let task = Task {
+            try await client.request(
+                GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+                as: StubPayload.self
+            )
+        }
+
+        try? await Task.sleep(for: .milliseconds(20))
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            XCTAssertTrue(true)
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+    }
+
+    private func makeClient(
+        retryPolicy: RetryPolicy = .disabled
+    ) -> URLSessionAPIClient {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [URLProtocolStub.self]
+
+        return URLSessionAPIClient(
+            session: URLSession(configuration: configuration),
+            retryPolicy: retryPolicy,
+            sleep: { _ in }
+        )
+    }
+
+    private static func response(
+        for request: URLRequest,
+        statusCode: Int,
+        headers: [String: String] = [:]
+    ) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: request.url!,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: headers
+        )!
+    }
+}
+
+private struct StubPayload: Decodable, Equatable {
+    let value: String
+}
+
+private final class URLProtocolStub: URLProtocol {
+    static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let handler = Self.requestHandler else {
+            client?.urlProtocol(
+                self,
+                didFailWithError: URLError(.badServerResponse)
+            )
+            return
+        }
+
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
 }

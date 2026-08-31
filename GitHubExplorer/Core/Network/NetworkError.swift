@@ -7,6 +7,7 @@ enum NetworkError: LocalizedError, Equatable {
     case forbidden
     case notFound
     case rateLimited
+    case validationFailed(String?)
     case serverError(statusCode: Int)
     case decodingFailed
     case transport(String)
@@ -25,6 +26,8 @@ enum NetworkError: LocalizedError, Equatable {
             return "The requested resource was not found."
         case .rateLimited:
             return "GitHub API rate limit reached. Try again later."
+        case let .validationFailed(message):
+            return message ?? "GitHub could not process this request."
         case let .serverError(statusCode):
             return "GitHub returned server error \(statusCode)."
         case .decodingFailed:
