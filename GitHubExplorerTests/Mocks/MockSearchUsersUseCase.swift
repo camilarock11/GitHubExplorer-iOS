@@ -62,6 +62,22 @@ final class MockFetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtoc
     }
 }
 
+final class MockFetchRepositoryDetailsUseCase: FetchRepositoryDetailsUseCaseProtocol {
+    var result: Result<GitHubRepositoryDetails, Error>
+    private(set) var receivedOwners: [String] = []
+    private(set) var receivedNames: [String] = []
+
+    init(result: Result<GitHubRepositoryDetails, Error>) {
+        self.result = result
+    }
+
+    func execute(owner: String, name: String) async throws -> GitHubRepositoryDetails {
+        receivedOwners.append(owner)
+        receivedNames.append(name)
+        return try result.get()
+    }
+}
+
 @MainActor
 final class UserProfileViewModelTests: XCTestCase {
     func testLoadIfNeeded_whenUseCaseSucceeds_publishesProfile() async {
@@ -313,6 +329,109 @@ final class UserRepositoriesViewModelTests: XCTestCase {
     }
 }
 
+@MainActor
+final class RepositoryDetailsViewModelTests: XCTestCase {
+    func testLoadIfNeeded_whenUseCaseSucceeds_publishesDetails() async {
+        let details = makeDetails()
+        let useCase = MockFetchRepositoryDetailsUseCase(result: .success(details))
+        let viewModel = RepositoryDetailsViewModel(
+            owner: "octocat",
+            name: "Hello-World",
+            fetchRepositoryDetailsUseCase: useCase
+        )
+
+        viewModel.loadIfNeeded()
+        await waitUntil {
+            if case .loaded = viewModel.state { return true }
+            return false
+        }
+
+        XCTAssertEqual(viewModel.state, .loaded(details))
+        XCTAssertEqual(useCase.receivedOwners, ["octocat"])
+        XCTAssertEqual(useCase.receivedNames, ["Hello-World"])
+    }
+
+    func testLoadIfNeeded_whenUseCaseFails_publishesFailure() async {
+        let useCase = MockFetchRepositoryDetailsUseCase(
+            result: .failure(NetworkError.notFound)
+        )
+        let viewModel = RepositoryDetailsViewModel(
+            owner: "octocat",
+            name: "missing",
+            fetchRepositoryDetailsUseCase: useCase
+        )
+
+        viewModel.loadIfNeeded()
+        await waitUntil {
+            if case .failed = viewModel.state { return true }
+            return false
+        }
+
+        guard case let .failed(message) = viewModel.state else {
+            return XCTFail("Expected failed state")
+        }
+        XCTAssertTrue(message.contains("not found"))
+    }
+
+    func testRefresh_fetchesDetailsAgain() async {
+        let details = makeDetails()
+        let useCase = MockFetchRepositoryDetailsUseCase(result: .success(details))
+        let viewModel = RepositoryDetailsViewModel(
+            owner: "octocat",
+            name: "Hello-World",
+            fetchRepositoryDetailsUseCase: useCase
+        )
+
+        viewModel.loadIfNeeded()
+        await waitUntil {
+            if case .loaded = viewModel.state { return true }
+            return false
+        }
+
+        await viewModel.refresh()
+
+        XCTAssertEqual(useCase.receivedOwners, ["octocat", "octocat"])
+        XCTAssertEqual(useCase.receivedNames, ["Hello-World", "Hello-World"])
+        XCTAssertEqual(viewModel.state, .loaded(details))
+    }
+
+    private func makeDetails() -> GitHubRepositoryDetails {
+        GitHubRepositoryDetails(
+            id: 42,
+            name: "Hello-World",
+            fullName: "octocat/Hello-World",
+            description: "My first repository",
+            htmlURL: URL(string: "https://github.com/octocat/Hello-World"),
+            isPrivate: false,
+            defaultBranch: "main",
+            language: "Swift",
+            stargazersCount: 80,
+            forksCount: 9,
+            watchersCount: 80,
+            openIssuesCount: 3,
+            licenseName: "MIT License",
+            topics: ["swift", "ios"],
+            createdAt: Date(timeIntervalSince1970: 1),
+            updatedAt: Date(timeIntervalSince1970: 2),
+            pushedAt: Date(timeIntervalSince1970: 3)
+        )
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 1,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        let start = Date()
+        while !condition(), Date().timeIntervalSince(start) < timeout {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+
+        if !condition() {
+            XCTFail("Timed out waiting for repository details state")
+        }
+    }
+}
+
 final class GitHubUserProfileMappingTests: XCTestCase {
     func testProfileDTO_mapsGitHubResponseAndNormalizesWebsite() throws {
         let json = """
@@ -407,5 +526,56 @@ final class GitHubUserProfileMappingTests: XCTestCase {
         XCTAssertEqual(queryItems["direction"], "asc")
         XCTAssertEqual(queryItems["page"], "2")
         XCTAssertEqual(queryItems["per_page"], "20")
+    }
+
+    func testRepositoryDetailsDTO_mapsRichMetadata() throws {
+        let json = """
+        {
+          "id": 42,
+          "name": "Hello-World",
+          "full_name": "octocat/Hello-World",
+          "description": "My first repository",
+          "html_url": "https://github.com/octocat/Hello-World",
+          "private": false,
+          "default_branch": "main",
+          "language": "Swift",
+          "stargazers_count": 80,
+          "forks_count": 9,
+          "watchers_count": 81,
+          "open_issues_count": 3,
+          "license": { "name": "MIT License" },
+          "topics": ["swift", "ios"],
+          "created_at": "2020-01-01T10:00:00Z",
+          "updated_at": "2026-08-31T10:00:00Z",
+          "pushed_at": "2026-08-30T09:00:00Z"
+        }
+        """
+
+        let dto = try JSONDecoder().decode(
+            GitHubRepositoryDetailsDTO.self,
+            from: Data(json.utf8)
+        )
+        let details = dto.toDomain()
+
+        XCTAssertEqual(details.fullName, "octocat/Hello-World")
+        XCTAssertFalse(details.isPrivate)
+        XCTAssertEqual(details.defaultBranch, "main")
+        XCTAssertEqual(details.watchersCount, 81)
+        XCTAssertEqual(details.openIssuesCount, 3)
+        XCTAssertEqual(details.licenseName, "MIT License")
+        XCTAssertEqual(details.topics, ["swift", "ios"])
+        XCTAssertNotNil(details.createdAt)
+        XCTAssertNotNil(details.updatedAt)
+        XCTAssertNotNil(details.pushedAt)
+    }
+
+    func testRepositoryDetailsEndpoint_buildsExpectedPathWithoutQueryItems() throws {
+        let request = try GitHubEndpoint.repositoryDetails(
+            owner: "octocat",
+            name: "Hello-World"
+        ).makeURLRequest()
+
+        XCTAssertEqual(request.url?.path, "/repos/octocat/Hello-World")
+        XCTAssertNil(request.url?.query)
     }
 }
