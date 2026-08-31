@@ -114,4 +114,9 @@ protocol GitHubUserRepository {
         page: Int,
         perPage: Int
     ) async throws -> UserRepositoriesPage
+
+    func fetchRepositoryDetails(
+        owner: String,
+        name: String
+    ) async throws -> GitHubRepositoryDetails
 }

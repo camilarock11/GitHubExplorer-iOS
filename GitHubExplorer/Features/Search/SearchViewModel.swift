@@ -362,3 +362,75 @@ final class UserRepositoriesViewModel: ObservableObject {
         }
     }
 }
+
+enum RepositoryDetailsViewState: Equatable {
+    case loading
+    case loaded(GitHubRepositoryDetails)
+    case failed(String)
+}
+
+@MainActor
+final class RepositoryDetailsViewModel: ObservableObject {
+    let owner: String
+    let name: String
+
+    @Published private(set) var state: RepositoryDetailsViewState = .loading
+
+    private let fetchRepositoryDetailsUseCase: FetchRepositoryDetailsUseCaseProtocol
+    private var activeTask: Task<Void, Never>?
+    private var hasStarted = false
+
+    init(
+        owner: String,
+        name: String,
+        fetchRepositoryDetailsUseCase: FetchRepositoryDetailsUseCaseProtocol
+    ) {
+        self.owner = owner
+        self.name = name
+        self.fetchRepositoryDetailsUseCase = fetchRepositoryDetailsUseCase
+    }
+
+    deinit {
+        activeTask?.cancel()
+    }
+
+    func loadIfNeeded() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        startLoading()
+    }
+
+    func retry() {
+        startLoading()
+    }
+
+    func refresh() async {
+        activeTask?.cancel()
+        await loadDetails()
+    }
+
+    private func startLoading() {
+        activeTask?.cancel()
+        state = .loading
+
+        activeTask = Task { [weak self] in
+            await self?.loadDetails()
+        }
+    }
+
+    private func loadDetails() async {
+        do {
+            let details = try await fetchRepositoryDetailsUseCase.execute(
+                owner: owner,
+                name: name
+            )
+            guard !Task.isCancelled else { return }
+            state = .loaded(details)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            state = .failed(error.localizedDescription)
+        }
+    }
+}

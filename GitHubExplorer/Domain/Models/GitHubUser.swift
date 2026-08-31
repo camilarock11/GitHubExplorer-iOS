@@ -33,6 +33,26 @@ struct GitHubRepository: Identifiable, Equatable {
     let updatedAt: Date?
 }
 
+struct GitHubRepositoryDetails: Equatable {
+    let id: Int
+    let name: String
+    let fullName: String
+    let description: String?
+    let htmlURL: URL?
+    let isPrivate: Bool
+    let defaultBranch: String
+    let language: String?
+    let stargazersCount: Int
+    let forksCount: Int
+    let watchersCount: Int
+    let openIssuesCount: Int
+    let licenseName: String?
+    let topics: [String]
+    let createdAt: Date?
+    let updatedAt: Date?
+    let pushedAt: Date?
+}
+
 struct UserRepositoriesPage: Equatable {
     let repositories: [GitHubRepository]
     let page: Int

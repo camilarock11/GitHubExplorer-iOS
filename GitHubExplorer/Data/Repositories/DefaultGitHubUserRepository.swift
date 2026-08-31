@@ -64,4 +64,16 @@ final class DefaultGitHubUserRepository: GitHubUserRepository {
             perPage: perPage
         )
     }
+
+    func fetchRepositoryDetails(
+        owner: String,
+        name: String
+    ) async throws -> GitHubRepositoryDetails {
+        let response = try await apiClient.request(
+            GitHubEndpoint.repositoryDetails(owner: owner, name: name),
+            as: GitHubRepositoryDetailsDTO.self
+        )
+
+        return response.toDomain()
+    }
 }

@@ -92,3 +92,29 @@ struct FetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol {
         )
     }
 }
+
+protocol FetchRepositoryDetailsUseCaseProtocol {
+    func execute(owner: String, name: String) async throws -> GitHubRepositoryDetails
+}
+
+struct FetchRepositoryDetailsUseCase: FetchRepositoryDetailsUseCaseProtocol {
+    private let repository: GitHubUserRepository
+
+    init(repository: GitHubUserRepository) {
+        self.repository = repository
+    }
+
+    func execute(owner: String, name: String) async throws -> GitHubRepositoryDetails {
+        let normalizedOwner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !normalizedOwner.isEmpty, !normalizedName.isEmpty else {
+            throw NetworkError.invalidURL
+        }
+
+        return try await repository.fetchRepositoryDetails(
+            owner: normalizedOwner,
+            name: normalizedName
+        )
+    }
+}

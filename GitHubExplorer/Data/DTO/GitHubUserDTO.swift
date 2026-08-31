@@ -127,3 +127,73 @@ struct GitHubRepositoryDTO: Decodable {
         )
     }
 }
+
+struct GitHubRepositoryDetailsDTO: Decodable {
+    struct LicenseDTO: Decodable {
+        let name: String?
+    }
+
+    let id: Int
+    let name: String
+    let fullName: String
+    let description: String?
+    let htmlURL: URL?
+    let isPrivate: Bool
+    let defaultBranch: String
+    let language: String?
+    let stargazersCount: Int
+    let forksCount: Int
+    let subscribersCount: Int?
+    let legacyWatchersCount: Int?
+    let openIssuesCount: Int
+    let license: LicenseDTO?
+    let topics: [String]?
+    let createdAt: String?
+    let updatedAt: String?
+    let pushedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case fullName = "full_name"
+        case description
+        case htmlURL = "html_url"
+        case isPrivate = "private"
+        case defaultBranch = "default_branch"
+        case language
+        case stargazersCount = "stargazers_count"
+        case forksCount = "forks_count"
+        case subscribersCount = "subscribers_count"
+        case legacyWatchersCount = "watchers_count"
+        case openIssuesCount = "open_issues_count"
+        case license
+        case topics
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case pushedAt = "pushed_at"
+    }
+
+    func toDomain() -> GitHubRepositoryDetails {
+        let formatter = ISO8601DateFormatter()
+
+        return GitHubRepositoryDetails(
+            id: id,
+            name: name,
+            fullName: fullName,
+            description: description,
+            htmlURL: htmlURL,
+            isPrivate: isPrivate,
+            defaultBranch: defaultBranch,
+            language: language,
+            stargazersCount: stargazersCount,
+            forksCount: forksCount,
+            watchersCount: subscribersCount ?? legacyWatchersCount ?? 0,
+            openIssuesCount: openIssuesCount,
+            licenseName: license?.name,
+            topics: topics ?? [],
+            createdAt: createdAt.flatMap { formatter.date(from: $0) },
+            updatedAt: updatedAt.flatMap { formatter.date(from: $0) },
+            pushedAt: pushedAt.flatMap { formatter.date(from: $0) }
+        )
+    }
+}
