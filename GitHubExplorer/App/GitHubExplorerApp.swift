@@ -8,7 +8,8 @@ struct GitHubExplorerApp: App {
         WindowGroup {
             RootView(
                 searchViewModel: container.makeSearchViewModel(),
-                fetchUserProfileUseCase: container.fetchUserProfileUseCase
+                fetchUserProfileUseCase: container.fetchUserProfileUseCase,
+                fetchUserRepositoriesUseCase: container.fetchUserRepositoriesUseCase
             )
         }
     }
