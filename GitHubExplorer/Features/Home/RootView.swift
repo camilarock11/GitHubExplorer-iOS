@@ -2,15 +2,23 @@ import SwiftUI
 
 struct RootView: View {
     private let searchViewModel: SearchViewModel
+    private let fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
 
-    init(searchViewModel: SearchViewModel) {
+    init(
+        searchViewModel: SearchViewModel,
+        fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
+    ) {
         self.searchViewModel = searchViewModel
+        self.fetchUserProfileUseCase = fetchUserProfileUseCase
     }
 
     var body: some View {
         TabView {
             NavigationStack {
-                SearchView(viewModel: searchViewModel)
+                SearchView(
+                    viewModel: searchViewModel,
+                    fetchUserProfileUseCase: fetchUserProfileUseCase
+                )
             }
             .tabItem {
                 Label("Explore", systemImage: "magnifyingglass")

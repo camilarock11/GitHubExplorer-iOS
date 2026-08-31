@@ -8,11 +8,14 @@ enum GitHubEndpoint: Endpoint {
         page: Int,
         perPage: Int
     )
+    case userProfile(login: String)
 
     var path: String {
         switch self {
         case .searchUsers:
             return "/search/users"
+        case let .userProfile(login):
+            return "/users/\(login)"
         }
     }
 
@@ -34,6 +37,8 @@ enum GitHubEndpoint: Endpoint {
             }
 
             return items
+        case .userProfile:
+            return []
         }
     }
 }

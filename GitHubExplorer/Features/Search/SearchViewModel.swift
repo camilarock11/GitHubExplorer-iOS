@@ -149,3 +149,69 @@ final class SearchViewModel: ObservableObject {
         }
     }
 }
+
+enum UserProfileViewState: Equatable {
+    case loading
+    case loaded(GitHubUserProfile)
+    case failed(String)
+}
+
+@MainActor
+final class UserProfileViewModel: ObservableObject {
+    let login: String
+
+    @Published private(set) var state: UserProfileViewState = .loading
+
+    private let fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
+    private var activeTask: Task<Void, Never>?
+    private var hasStarted = false
+
+    init(
+        login: String,
+        fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
+    ) {
+        self.login = login
+        self.fetchUserProfileUseCase = fetchUserProfileUseCase
+    }
+
+    deinit {
+        activeTask?.cancel()
+    }
+
+    func loadIfNeeded() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        startLoading()
+    }
+
+    func retry() {
+        startLoading()
+    }
+
+    func refresh() async {
+        activeTask?.cancel()
+        await loadProfile()
+    }
+
+    private func startLoading() {
+        activeTask?.cancel()
+        state = .loading
+
+        activeTask = Task { [weak self] in
+            await self?.loadProfile()
+        }
+    }
+
+    private func loadProfile() async {
+        do {
+            let profile = try await fetchUserProfileUseCase.execute(login: login)
+            guard !Task.isCancelled else { return }
+            state = .loaded(profile)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            state = .failed(error.localizedDescription)
+        }
+    }
+}
