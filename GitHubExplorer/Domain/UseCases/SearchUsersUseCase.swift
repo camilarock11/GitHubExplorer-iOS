@@ -56,3 +56,39 @@ struct FetchUserProfileUseCase: FetchUserProfileUseCaseProtocol {
         return try await repository.fetchUserProfile(login: normalizedLogin)
     }
 }
+
+protocol FetchUserRepositoriesUseCaseProtocol {
+    func execute(
+        login: String,
+        options: UserRepositoryOptions,
+        page: Int,
+        perPage: Int
+    ) async throws -> UserRepositoriesPage
+}
+
+struct FetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol {
+    private let repository: GitHubUserRepository
+
+    init(repository: GitHubUserRepository) {
+        self.repository = repository
+    }
+
+    func execute(
+        login: String,
+        options: UserRepositoryOptions,
+        page: Int,
+        perPage: Int
+    ) async throws -> UserRepositoriesPage {
+        let normalizedLogin = login.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedLogin.isEmpty else {
+            return UserRepositoriesPage(repositories: [], page: page, perPage: perPage)
+        }
+
+        return try await repository.fetchUserRepositories(
+            login: normalizedLogin,
+            options: options,
+            page: page,
+            perPage: perPage
+        )
+    }
+}
