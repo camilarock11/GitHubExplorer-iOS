@@ -4,15 +4,18 @@ struct RootView: View {
     private let searchViewModel: SearchViewModel
     private let fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
     private let fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol
+    private let fetchRepositoryDetailsUseCase: FetchRepositoryDetailsUseCaseProtocol
 
     init(
         searchViewModel: SearchViewModel,
         fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol,
-        fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol
+        fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol,
+        fetchRepositoryDetailsUseCase: FetchRepositoryDetailsUseCaseProtocol
     ) {
         self.searchViewModel = searchViewModel
         self.fetchUserProfileUseCase = fetchUserProfileUseCase
         self.fetchUserRepositoriesUseCase = fetchUserRepositoriesUseCase
+        self.fetchRepositoryDetailsUseCase = fetchRepositoryDetailsUseCase
     }
 
     var body: some View {
@@ -21,7 +24,8 @@ struct RootView: View {
                 SearchView(
                     viewModel: searchViewModel,
                     fetchUserProfileUseCase: fetchUserProfileUseCase,
-                    fetchUserRepositoriesUseCase: fetchUserRepositoriesUseCase
+                    fetchUserRepositoriesUseCase: fetchUserRepositoriesUseCase,
+                    fetchRepositoryDetailsUseCase: fetchRepositoryDetailsUseCase
                 )
             }
             .tabItem {
