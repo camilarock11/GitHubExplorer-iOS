@@ -31,4 +31,13 @@ final class DefaultGitHubUserRepository: GitHubUserRepository {
             perPage: perPage
         )
     }
+
+    func fetchUserProfile(login: String) async throws -> GitHubUserProfile {
+        let response = try await apiClient.request(
+            GitHubEndpoint.userProfile(login: login),
+            as: GitHubUserProfileDTO.self
+        )
+
+        return response.toDomain()
+    }
 }
