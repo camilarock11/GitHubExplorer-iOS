@@ -35,16 +35,57 @@ struct SearchView: View {
         .navigationTitle("GitHub Explorer")
         .searchable(text: $viewModel.query, prompt: "Search users")
         .onSubmit(of: .search, viewModel.search)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                searchOptionsMenu
+            }
+        }
+    }
+
+    private var searchOptionsMenu: some View {
+        Menu {
+            Picker("Sort by", selection: $viewModel.sort) {
+                ForEach(UserSearchSort.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+
+            if viewModel.sort != .bestMatch {
+                Picker("Order", selection: $viewModel.order) {
+                    ForEach(UserSearchOrder.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+            }
+
+            if viewModel.hasPendingSearchOptions {
+                Divider()
+
+                Button {
+                    viewModel.search()
+                } label: {
+                    Label("Apply sorting", systemImage: "checkmark")
+                }
+            }
+        } label: {
+            Label("Search options", systemImage: "arrow.up.arrow.down.circle")
+        }
     }
 
     private var userList: some View {
-        List(viewModel.users) { user in
-            Link(destination: user.profileURL ?? URL(string: "https://github.com")!) {
-                UserRowView(user: user)
-            }
-            .buttonStyle(.plain)
-            .onAppear {
-                viewModel.loadNextPageIfNeeded(currentUser: user)
+        List {
+            Section {
+                ForEach(viewModel.users) { user in
+                    Link(destination: user.profileURL ?? URL(string: "https://github.com")!) {
+                        UserRowView(user: user)
+                    }
+                    .buttonStyle(.plain)
+                    .onAppear {
+                        viewModel.loadNextPageIfNeeded(currentUser: user)
+                    }
+                }
+            } header: {
+                Text("\(viewModel.totalCount) results")
             }
         }
         .overlay(alignment: .bottom) {

@@ -15,7 +15,9 @@ final class SearchViewModelTests: XCTestCase {
         await waitUntil { viewModel.state == .loaded }
 
         XCTAssertEqual(viewModel.users, [user])
+        XCTAssertEqual(viewModel.totalCount, 1)
         XCTAssertEqual(useCase.receivedQueries, ["octocat"])
+        XCTAssertEqual(useCase.receivedOptions, [.default])
         XCTAssertEqual(useCase.receivedPages, [1])
     }
 
@@ -30,6 +32,7 @@ final class SearchViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.state, .empty)
         XCTAssertTrue(viewModel.users.isEmpty)
+        XCTAssertEqual(viewModel.totalCount, 0)
     }
 
     func testSearch_whenUseCaseFails_publishesErrorState() async {
@@ -81,6 +84,50 @@ final class SearchViewModelTests: XCTestCase {
         await waitUntil { viewModel.users.count == 2 }
 
         XCTAssertEqual(useCase.receivedQueries, ["apple", "apple"])
+        XCTAssertEqual(useCase.receivedOptions, [.default, .default])
+        XCTAssertEqual(useCase.receivedPages, [1, 2])
+        XCTAssertEqual(viewModel.users, [firstUser, secondUser])
+    }
+
+    func testPagination_whenSearchOptionsChange_keepsUsingActiveOptions() async {
+        let firstUser = makeUser(id: 1, login: "swift-user")
+        let firstPage = UserSearchPage(
+            users: [firstUser],
+            totalCount: 40,
+            page: 1,
+            perPage: 20
+        )
+        let useCase = MockSearchUsersUseCase(result: .success(firstPage))
+        let viewModel = SearchViewModel(searchUsersUseCase: useCase)
+        viewModel.query = "swift"
+        viewModel.sort = .followers
+        viewModel.order = .descending
+
+        viewModel.search()
+        await waitUntil { viewModel.state == .loaded }
+
+        let secondUser = makeUser(id: 2, login: "swift-user-2")
+        useCase.result = .success(
+            UserSearchPage(
+                users: [secondUser],
+                totalCount: 40,
+                page: 2,
+                perPage: 20
+            )
+        )
+
+        viewModel.sort = .joined
+        viewModel.order = .ascending
+        XCTAssertTrue(viewModel.hasPendingSearchOptions)
+
+        viewModel.loadNextPageIfNeeded(currentUser: firstUser)
+        await waitUntil { viewModel.users.count == 2 }
+
+        let activeOptions = UserSearchOptions(
+            sort: .followers,
+            order: .descending
+        )
+        XCTAssertEqual(useCase.receivedOptions, [activeOptions, activeOptions])
         XCTAssertEqual(useCase.receivedPages, [1, 2])
         XCTAssertEqual(viewModel.users, [firstUser, secondUser])
     }
@@ -99,7 +146,32 @@ final class SearchViewModelTests: XCTestCase {
         await viewModel.refresh()
 
         XCTAssertEqual(useCase.receivedQueries, ["apple", "apple"])
+        XCTAssertEqual(useCase.receivedOptions, [.default, .default])
         XCTAssertEqual(useCase.receivedPages, [1, 1])
+    }
+
+    func testRefresh_whenSearchOptionsChange_refreshesActiveOptions() async {
+        let user = makeUser(id: 1, login: "swift-user")
+        let page = UserSearchPage(users: [user], totalCount: 1, page: 1, perPage: 20)
+        let useCase = MockSearchUsersUseCase(result: .success(page))
+        let viewModel = SearchViewModel(searchUsersUseCase: useCase)
+        viewModel.query = "swift"
+        viewModel.sort = .repositories
+        viewModel.order = .ascending
+
+        viewModel.search()
+        await waitUntil { viewModel.state == .loaded }
+
+        viewModel.sort = .joined
+        viewModel.order = .descending
+        await viewModel.refresh()
+
+        let activeOptions = UserSearchOptions(
+            sort: .repositories,
+            order: .ascending
+        )
+        XCTAssertEqual(useCase.receivedOptions, [activeOptions, activeOptions])
+        XCTAssertTrue(viewModel.hasPendingSearchOptions)
     }
 
     func testUserSearchPage_whenTotalExceedsGitHubSearchLimit_stopsAtThousandResults() {
@@ -150,6 +222,49 @@ final class URLSessionAPIClientTests: XCTestCase {
         super.tearDown()
     }
 
+    func testSearchUsersEndpoint_whenSortSelected_addsSortAndOrderQueryItems() throws {
+        let request = try GitHubEndpoint.searchUsers(
+            query: "swift",
+            sort: "followers",
+            order: "asc",
+            page: 2,
+            perPage: 50
+        ).makeURLRequest()
+
+        let components = try XCTUnwrap(
+            URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
+        )
+        let queryItems = Dictionary(
+            uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+                item.value.map { (item.name, $0) }
+            }
+        )
+
+        XCTAssertEqual(queryItems["q"], "swift")
+        XCTAssertEqual(queryItems["sort"], "followers")
+        XCTAssertEqual(queryItems["order"], "asc")
+        XCTAssertEqual(queryItems["page"], "2")
+        XCTAssertEqual(queryItems["per_page"], "50")
+    }
+
+    func testSearchUsersEndpoint_whenBestMatchSelected_omitsSortAndOrder() throws {
+        let request = try GitHubEndpoint.searchUsers(
+            query: "swift",
+            sort: nil,
+            order: nil,
+            page: 1,
+            perPage: 20
+        ).makeURLRequest()
+
+        let components = try XCTUnwrap(
+            URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
+        )
+        let names = Set((components.queryItems ?? []).map(\.name))
+
+        XCTAssertFalse(names.contains("sort"))
+        XCTAssertFalse(names.contains("order"))
+    }
+
     func testRequest_whenResponseSucceeds_decodesPayloadAndSendsGitHubHeaders() async throws {
         var apiVersionHeader: String?
         var acceptHeader: String?
@@ -165,7 +280,13 @@ final class URLSessionAPIClientTests: XCTestCase {
 
         let client = makeClient()
         let result = try await client.request(
-            GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+            GitHubEndpoint.searchUsers(
+                query: "octocat",
+                sort: nil,
+                order: nil,
+                page: 1,
+                perPage: 20
+            ),
             as: StubPayload.self
         )
 
@@ -184,7 +305,13 @@ final class URLSessionAPIClientTests: XCTestCase {
 
         do {
             let _: StubPayload = try await makeClient().request(
-                GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+                GitHubEndpoint.searchUsers(
+                    query: "octocat",
+                    sort: nil,
+                    order: nil,
+                    page: 1,
+                    perPage: 20
+                ),
                 as: StubPayload.self
             )
             XCTFail("Expected decoding failure")
@@ -205,7 +332,13 @@ final class URLSessionAPIClientTests: XCTestCase {
 
         do {
             let _: StubPayload = try await makeClient().request(
-                GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+                GitHubEndpoint.searchUsers(
+                    query: "octocat",
+                    sort: nil,
+                    order: nil,
+                    page: 1,
+                    perPage: 20
+                ),
                 as: StubPayload.self
             )
             XCTFail("Expected validation error")
@@ -226,7 +359,13 @@ final class URLSessionAPIClientTests: XCTestCase {
 
         do {
             let _: StubPayload = try await makeClient().request(
-                GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+                GitHubEndpoint.searchUsers(
+                    query: "octocat",
+                    sort: nil,
+                    order: nil,
+                    page: 1,
+                    perPage: 20
+                ),
                 as: StubPayload.self
             )
             XCTFail("Expected rate limit error")
@@ -260,7 +399,13 @@ final class URLSessionAPIClientTests: XCTestCase {
             retryPolicy: RetryPolicy(maxAttempts: 2, baseDelayNanoseconds: 0)
         )
         let result = try await client.request(
-            GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+            GitHubEndpoint.searchUsers(
+                query: "octocat",
+                sort: nil,
+                order: nil,
+                page: 1,
+                perPage: 20
+            ),
             as: StubPayload.self
         )
 
@@ -280,7 +425,13 @@ final class URLSessionAPIClientTests: XCTestCase {
         let client = makeClient()
         let task = Task {
             try await client.request(
-                GitHubEndpoint.searchUsers(query: "octocat", page: 1, perPage: 20),
+                GitHubEndpoint.searchUsers(
+                    query: "octocat",
+                    sort: nil,
+                    order: nil,
+                    page: 1,
+                    perPage: 20
+                ),
                 as: StubPayload.self
             )
         }
