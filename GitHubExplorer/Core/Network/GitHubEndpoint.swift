@@ -16,6 +16,7 @@ enum GitHubEndpoint: Endpoint {
         page: Int,
         perPage: Int
     )
+    case repositoryDetails(owner: String, name: String)
 
     var path: String {
         switch self {
@@ -25,6 +26,8 @@ enum GitHubEndpoint: Endpoint {
             return "/users/\(login)"
         case let .userRepositories(login, _, _, _, _):
             return "/users/\(login)/repos"
+        case let .repositoryDetails(owner, name):
+            return "/repos/\(owner)/\(name)"
         }
     }
 
@@ -46,7 +49,7 @@ enum GitHubEndpoint: Endpoint {
             }
 
             return items
-        case .userProfile:
+        case .userProfile, .repositoryDetails:
             return []
         case let .userRepositories(_, sort, direction, page, perPage):
             return [
