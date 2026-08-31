@@ -35,3 +35,24 @@ struct SearchUsersUseCase: SearchUsersUseCaseProtocol {
         )
     }
 }
+
+protocol FetchUserProfileUseCaseProtocol {
+    func execute(login: String) async throws -> GitHubUserProfile
+}
+
+struct FetchUserProfileUseCase: FetchUserProfileUseCaseProtocol {
+    private let repository: GitHubUserRepository
+
+    init(repository: GitHubUserRepository) {
+        self.repository = repository
+    }
+
+    func execute(login: String) async throws -> GitHubUserProfile {
+        let normalizedLogin = login.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedLogin.isEmpty else {
+            throw NetworkError.invalidURL
+        }
+
+        return try await repository.fetchUserProfile(login: normalizedLogin)
+    }
+}
