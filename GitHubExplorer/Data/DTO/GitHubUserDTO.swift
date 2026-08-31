@@ -143,7 +143,8 @@ struct GitHubRepositoryDetailsDTO: Decodable {
     let language: String?
     let stargazersCount: Int
     let forksCount: Int
-    let watchersCount: Int
+    let subscribersCount: Int?
+    let legacyWatchersCount: Int?
     let openIssuesCount: Int
     let license: LicenseDTO?
     let topics: [String]?
@@ -162,7 +163,8 @@ struct GitHubRepositoryDetailsDTO: Decodable {
         case language
         case stargazersCount = "stargazers_count"
         case forksCount = "forks_count"
-        case watchersCount = "watchers_count"
+        case subscribersCount = "subscribers_count"
+        case legacyWatchersCount = "watchers_count"
         case openIssuesCount = "open_issues_count"
         case license
         case topics
@@ -185,7 +187,7 @@ struct GitHubRepositoryDetailsDTO: Decodable {
             language: language,
             stargazersCount: stargazersCount,
             forksCount: forksCount,
-            watchersCount: watchersCount,
+            watchersCount: subscribersCount ?? legacyWatchersCount ?? 0,
             openIssuesCount: openIssuesCount,
             licenseName: license?.name,
             topics: topics ?? [],
