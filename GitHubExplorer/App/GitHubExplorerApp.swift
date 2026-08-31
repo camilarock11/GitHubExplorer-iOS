@@ -9,7 +9,8 @@ struct GitHubExplorerApp: App {
             RootView(
                 searchViewModel: container.makeSearchViewModel(),
                 fetchUserProfileUseCase: container.fetchUserProfileUseCase,
-                fetchUserRepositoriesUseCase: container.fetchUserRepositoriesUseCase
+                fetchUserRepositoriesUseCase: container.fetchUserRepositoriesUseCase,
+                fetchRepositoryDetailsUseCase: container.fetchRepositoryDetailsUseCase
             )
         }
     }
