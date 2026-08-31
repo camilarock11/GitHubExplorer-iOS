@@ -9,6 +9,13 @@ enum GitHubEndpoint: Endpoint {
         perPage: Int
     )
     case userProfile(login: String)
+    case userRepositories(
+        login: String,
+        sort: String,
+        direction: String,
+        page: Int,
+        perPage: Int
+    )
 
     var path: String {
         switch self {
@@ -16,6 +23,8 @@ enum GitHubEndpoint: Endpoint {
             return "/search/users"
         case let .userProfile(login):
             return "/users/\(login)"
+        case let .userRepositories(login, _, _, _, _):
+            return "/users/\(login)/repos"
         }
     }
 
@@ -39,6 +48,14 @@ enum GitHubEndpoint: Endpoint {
             return items
         case .userProfile:
             return []
+        case let .userRepositories(_, sort, direction, page, perPage):
+            return [
+                URLQueryItem(name: "type", value: "owner"),
+                URLQueryItem(name: "sort", value: sort),
+                URLQueryItem(name: "direction", value: direction),
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage))
+            ]
         }
     }
 }

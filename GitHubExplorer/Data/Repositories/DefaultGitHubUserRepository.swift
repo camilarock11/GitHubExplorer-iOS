@@ -40,4 +40,28 @@ final class DefaultGitHubUserRepository: GitHubUserRepository {
 
         return response.toDomain()
     }
+
+    func fetchUserRepositories(
+        login: String,
+        options: UserRepositoryOptions,
+        page: Int,
+        perPage: Int
+    ) async throws -> UserRepositoriesPage {
+        let response = try await apiClient.request(
+            GitHubEndpoint.userRepositories(
+                login: login,
+                sort: options.sort.rawValue,
+                direction: options.order.rawValue,
+                page: page,
+                perPage: perPage
+            ),
+            as: [GitHubRepositoryDTO].self
+        )
+
+        return UserRepositoriesPage(
+            repositories: response.map { $0.toDomain() },
+            page: page,
+            perPage: perPage
+        )
+    }
 }
