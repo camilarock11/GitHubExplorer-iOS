@@ -215,3 +215,150 @@ final class UserProfileViewModel: ObservableObject {
         }
     }
 }
+
+enum UserRepositoriesViewState: Equatable {
+    case loading
+    case loaded
+    case empty
+    case failed(String)
+}
+
+@MainActor
+final class UserRepositoriesViewModel: ObservableObject {
+    let login: String
+
+    @Published var sort: UserRepositorySort = .updated
+    @Published var order: UserRepositoryOrder = .descending
+    @Published private(set) var repositories: [GitHubRepository] = []
+    @Published private(set) var state: UserRepositoriesViewState = .loading
+    @Published private(set) var isLoadingNextPage = false
+
+    private let fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol
+    private let pageSize = 20
+    private var currentPage = 0
+    private var canLoadMore = false
+    private var activeOptions: UserRepositoryOptions = .default
+    private var activeTask: Task<Void, Never>?
+    private var hasStarted = false
+
+    init(
+        login: String,
+        fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol
+    ) {
+        self.login = login
+        self.fetchUserRepositoriesUseCase = fetchUserRepositoriesUseCase
+    }
+
+    deinit {
+        activeTask?.cancel()
+    }
+
+    var hasPendingOptions: Bool {
+        currentOptions != activeOptions
+    }
+
+    func loadIfNeeded() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        startLoading(options: currentOptions)
+    }
+
+    func applyOptions() {
+        startLoading(options: currentOptions)
+    }
+
+    func retry() {
+        sort = activeOptions.sort
+        order = activeOptions.order
+        startLoading(options: activeOptions)
+    }
+
+    func refresh() async {
+        activeTask?.cancel()
+        currentPage = 0
+        canLoadMore = false
+        isLoadingNextPage = false
+
+        await loadPage(
+            1,
+            options: activeOptions,
+            replacingCurrentResults: true
+        )
+    }
+
+    func loadNextPageIfNeeded(currentRepository: GitHubRepository) {
+        guard currentRepository.id == repositories.last?.id else { return }
+        guard canLoadMore, !isLoadingNextPage else { return }
+
+        isLoadingNextPage = true
+        let optionsToLoad = activeOptions
+
+        activeTask = Task { [weak self] in
+            guard let self else { return }
+            await self.loadPage(
+                self.currentPage + 1,
+                options: optionsToLoad,
+                replacingCurrentResults: false
+            )
+            self.isLoadingNextPage = false
+        }
+    }
+
+    private var currentOptions: UserRepositoryOptions {
+        UserRepositoryOptions(sort: sort, order: order)
+    }
+
+    private func startLoading(options: UserRepositoryOptions) {
+        activeTask?.cancel()
+        currentPage = 0
+        canLoadMore = false
+        isLoadingNextPage = false
+        repositories = []
+        activeOptions = options
+        state = .loading
+
+        activeTask = Task { [weak self] in
+            await self?.loadPage(
+                1,
+                options: options,
+                replacingCurrentResults: true
+            )
+        }
+    }
+
+    private func loadPage(
+        _ page: Int,
+        options: UserRepositoryOptions,
+        replacingCurrentResults: Bool
+    ) async {
+        do {
+            let result = try await fetchUserRepositoriesUseCase.execute(
+                login: login,
+                options: options,
+                page: page,
+                perPage: pageSize
+            )
+
+            guard !Task.isCancelled else { return }
+            guard options == activeOptions else { return }
+
+            currentPage = page
+            canLoadMore = result.hasNextPage
+
+            if replacingCurrentResults {
+                repositories = result.repositories
+            } else {
+                let existingIDs = Set(repositories.map(\.id))
+                repositories += result.repositories.filter { !existingIDs.contains($0.id) }
+            }
+
+            state = repositories.isEmpty ? .empty : .loaded
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            guard options == activeOptions else { return }
+            state = .failed(error.localizedDescription)
+        }
+    }
+}
