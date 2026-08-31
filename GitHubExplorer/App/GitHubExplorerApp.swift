@@ -6,7 +6,10 @@ struct GitHubExplorerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(searchViewModel: container.makeSearchViewModel())
+            RootView(
+                searchViewModel: container.makeSearchViewModel(),
+                fetchUserProfileUseCase: container.fetchUserProfileUseCase
+            )
         }
     }
 }
