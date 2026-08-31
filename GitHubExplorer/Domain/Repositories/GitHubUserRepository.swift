@@ -57,4 +57,6 @@ protocol GitHubUserRepository {
         page: Int,
         perPage: Int
     ) async throws -> UserSearchPage
+
+    func fetchUserProfile(login: String) async throws -> GitHubUserProfile
 }
