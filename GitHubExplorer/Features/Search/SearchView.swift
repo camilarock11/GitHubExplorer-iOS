@@ -3,13 +3,16 @@ import SwiftUI
 struct SearchView: View {
     @StateObject private var viewModel: SearchViewModel
     private let fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
+    private let fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol
 
     init(
         viewModel: SearchViewModel,
-        fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
+        fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol,
+        fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol
     ) {
         _viewModel = StateObject(wrappedValue: viewModel)
         self.fetchUserProfileUseCase = fetchUserProfileUseCase
+        self.fetchUserRepositoriesUseCase = fetchUserRepositoriesUseCase
     }
 
     var body: some View {
@@ -84,7 +87,8 @@ struct SearchView: View {
                     NavigationLink {
                         UserProfileView(
                             login: user.login,
-                            fetchUserProfileUseCase: fetchUserProfileUseCase
+                            fetchUserProfileUseCase: fetchUserProfileUseCase,
+                            fetchUserRepositoriesUseCase: fetchUserRepositoriesUseCase
                         )
                     } label: {
                         UserRowView(user: user)
@@ -113,11 +117,13 @@ struct SearchView: View {
 
 struct UserProfileView: View {
     @StateObject private var viewModel: UserProfileViewModel
+    private let fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol
 
     @MainActor
     init(
         login: String,
-        fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
+        fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol,
+        fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol
     ) {
         _viewModel = StateObject(
             wrappedValue: UserProfileViewModel(
@@ -125,6 +131,7 @@ struct UserProfileView: View {
                 fetchUserProfileUseCase: fetchUserProfileUseCase
             )
         )
+        self.fetchUserRepositoriesUseCase = fetchUserRepositoriesUseCase
     }
 
     var body: some View {
@@ -206,7 +213,19 @@ struct UserProfileView: View {
         HStack(spacing: 12) {
             ProfileMetricView(value: profile.followers, title: "Followers")
             ProfileMetricView(value: profile.following, title: "Following")
-            ProfileMetricView(value: profile.publicRepositories, title: "Repositories")
+
+            NavigationLink {
+                UserRepositoriesView(
+                    login: profile.login,
+                    fetchUserRepositoriesUseCase: fetchUserRepositoriesUseCase
+                )
+            } label: {
+                ProfileMetricView(
+                    value: profile.publicRepositories,
+                    title: "Repositories"
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -240,6 +259,146 @@ struct UserProfileView: View {
             }
         }
         .font(.headline)
+    }
+}
+
+struct UserRepositoriesView: View {
+    @StateObject private var viewModel: UserRepositoriesViewModel
+
+    @MainActor
+    init(
+        login: String,
+        fetchUserRepositoriesUseCase: FetchUserRepositoriesUseCaseProtocol
+    ) {
+        _viewModel = StateObject(
+            wrappedValue: UserRepositoriesViewModel(
+                login: login,
+                fetchUserRepositoriesUseCase: fetchUserRepositoriesUseCase
+            )
+        )
+    }
+
+    var body: some View {
+        Group {
+            switch viewModel.state {
+            case .loading:
+                ProgressView("Loading repositories…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .empty:
+                ContentUnavailableView(
+                    "No repositories",
+                    systemImage: "folder",
+                    description: Text("This user has no public repositories to show.")
+                )
+            case let .failed(message):
+                ContentUnavailableView {
+                    Label("Repositories unavailable", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(message)
+                } actions: {
+                    Button("Try Again", action: viewModel.retry)
+                }
+            case .loaded:
+                repositoryList
+            }
+        }
+        .navigationTitle("Repositories")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                repositoryOptionsMenu
+            }
+        }
+        .task {
+            viewModel.loadIfNeeded()
+        }
+    }
+
+    private var repositoryList: some View {
+        List(viewModel.repositories) { repository in
+            RepositoryRowView(repository: repository)
+                .onAppear {
+                    viewModel.loadNextPageIfNeeded(currentRepository: repository)
+                }
+        }
+        .overlay(alignment: .bottom) {
+            if viewModel.isLoadingNextPage {
+                ProgressView()
+                    .padding()
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom)
+            }
+        }
+        .refreshable {
+            await viewModel.refresh()
+        }
+    }
+
+    private var repositoryOptionsMenu: some View {
+        Menu {
+            Picker("Sort by", selection: $viewModel.sort) {
+                ForEach(UserRepositorySort.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+
+            Picker("Order", selection: $viewModel.order) {
+                ForEach(UserRepositoryOrder.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+
+            if viewModel.hasPendingOptions {
+                Divider()
+
+                Button {
+                    viewModel.applyOptions()
+                } label: {
+                    Label("Apply sorting", systemImage: "checkmark")
+                }
+            }
+        } label: {
+            Label("Repository options", systemImage: "arrow.up.arrow.down.circle")
+        }
+    }
+}
+
+private struct RepositoryRowView: View {
+    let repository: GitHubRepository
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(repository.name)
+                .font(.headline)
+
+            if let description = repository.description, !description.isEmpty {
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+
+            HStack(spacing: 14) {
+                if let language = repository.language, !language.isEmpty {
+                    Label(language, systemImage: "circle.fill")
+                }
+
+                Label(repository.stargazersCount.formatted(), systemImage: "star")
+                Label(repository.forksCount.formatted(), systemImage: "tuningfork")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if let updatedAt = repository.updatedAt {
+                Label(
+                    "Updated \(updatedAt.formatted(date: .abbreviated, time: .omitted))",
+                    systemImage: "clock"
+                )
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 6)
     }
 }
 
