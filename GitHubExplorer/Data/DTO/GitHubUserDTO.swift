@@ -92,3 +92,38 @@ struct GitHubUserProfileDTO: Decodable {
         return URL(string: "https://\(rawValue)")
     }
 }
+
+struct GitHubRepositoryDTO: Decodable {
+    let id: Int
+    let name: String
+    let description: String?
+    let htmlURL: URL?
+    let language: String?
+    let stargazersCount: Int
+    let forksCount: Int
+    let updatedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case htmlURL = "html_url"
+        case language
+        case stargazersCount = "stargazers_count"
+        case forksCount = "forks_count"
+        case updatedAt = "updated_at"
+    }
+
+    func toDomain() -> GitHubRepository {
+        GitHubRepository(
+            id: id,
+            name: name,
+            description: description,
+            htmlURL: htmlURL,
+            language: language,
+            stargazersCount: stargazersCount,
+            forksCount: forksCount,
+            updatedAt: updatedAt.flatMap { ISO8601DateFormatter().date(from: $0) }
+        )
+    }
+}
