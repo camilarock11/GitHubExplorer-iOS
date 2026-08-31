@@ -4,16 +4,19 @@ struct DependencyContainer {
     let apiClient: APIClient
     let userRepository: GitHubUserRepository
     let searchUsersUseCase: SearchUsersUseCaseProtocol
+    let fetchUserProfileUseCase: FetchUserProfileUseCaseProtocol
 
     static let live: DependencyContainer = {
         let apiClient = URLSessionAPIClient()
         let repository = DefaultGitHubUserRepository(apiClient: apiClient)
-        let useCase = SearchUsersUseCase(repository: repository)
+        let searchUseCase = SearchUsersUseCase(repository: repository)
+        let profileUseCase = FetchUserProfileUseCase(repository: repository)
 
         return DependencyContainer(
             apiClient: apiClient,
             userRepository: repository,
-            searchUsersUseCase: useCase
+            searchUsersUseCase: searchUseCase,
+            fetchUserProfileUseCase: profileUseCase
         )
     }()
 
