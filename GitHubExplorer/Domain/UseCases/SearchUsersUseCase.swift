@@ -3,6 +3,7 @@ import Foundation
 protocol SearchUsersUseCaseProtocol {
     func execute(
         query: String,
+        options: UserSearchOptions,
         page: Int,
         perPage: Int
     ) async throws -> UserSearchPage
@@ -17,6 +18,7 @@ struct SearchUsersUseCase: SearchUsersUseCaseProtocol {
 
     func execute(
         query: String,
+        options: UserSearchOptions,
         page: Int,
         perPage: Int
     ) async throws -> UserSearchPage {
@@ -27,6 +29,7 @@ struct SearchUsersUseCase: SearchUsersUseCaseProtocol {
 
         return try await repository.searchUsers(
             query: normalizedQuery,
+            options: options,
             page: page,
             perPage: perPage
         )
